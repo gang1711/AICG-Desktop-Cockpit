@@ -1,0 +1,35 @@
+MIT License
+
+Copyright (c) 2026 叶浩 (AICG-Governor)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+第三方组件版权说明（各自按其许可分发）：
+- DeskBox — GPL-3.0 — 朱天雨 (Tianyu199509)
+- Lively Wallpaper — GPL-3.0 — rocksdanister
+- QuickLook — GPL-3.0 — QL-Win
+- TagStudio — GPL-3.0 — TagStudioDev
+- Listen1 — Apache-2.0 — listen1
+- Everything — 免费软件 — voidtools
+- TranslucentTB — GPL-3.0 — Charles Milette
+
+本仓库脚本仅作为上述组件的安装与配置编排工具，不包含、不重分发任何组件源代码；
+运行时按需从各官方发布渠道下载原始安装包。
