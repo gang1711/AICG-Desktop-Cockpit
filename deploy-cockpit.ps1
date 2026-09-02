@@ -168,7 +168,7 @@ foreach ($d in $dirs) { New-Item -ItemType Directory -Force -Path $d | Out-Null 
 Write-Ok "工作台目录: $WorkRoot（含素材中心/壁纸库/归档库/收纳箱）"
 
 # ============================================================
-Write-Step "6/9 注入 DeskBox 13 格驾驶舱配置"
+Write-Step "6/9 注入 DeskBox 16 格驾驶舱配置"
 if ((Test-Path $deskboxExe) -and -not $SkipDeskBoxConfig) {
   Stop-AppProc @("DeskBox"); Start-Sleep 1
   $cfgDir = "$env:LOCALAPPDATA\DeskBox\data"
@@ -250,7 +250,7 @@ if ((Test-Path $deskboxExe) -and -not $SkipDeskBoxConfig) {
       extensions = @("jpg","jpeg","png","webp","gif","bmp","mp4","mov","mkv","avi","webm","zip","rar","7z","txt","md","docx","doc","xlsx","pptx","pdf","wav","mp3","flac","m4a","psd","srt","ass","url")
       excludedExtensions = @("lnk","tmp","crdownload","part") })
     [IO.File]::WriteAllText($cfgPath, ($s | ConvertTo-Json -Depth 10))
-    Write-Ok "DeskBox 13 格配置已注入（热键 Ctrl+Alt+D / 五色待办 / 自动整理 / 收纳根=$WorkRoot\收纳箱）"
+    Write-Ok "DeskBox 16 格配置已注入（热键 Ctrl+Alt+D / 五色待办 / 自动整理 / 收纳根=$WorkRoot\收纳箱）"
   } else { Write-Warn2 "未找到 DeskBox 配置文件（先手动启动一次 DeskBox 再重跑）" }
 } else { Write-Warn2 "跳过 DeskBox 配置注入" }
 
@@ -311,6 +311,10 @@ New-Item -ItemType Directory -Force -Path "$hub\_索引" | Out-Null
 $mgrSrc = $null
 foreach ($c in @((Join-Path $PSScriptRoot "知识中枢.py"), (Join-Path $PSScriptRoot "resources\知识中枢.py"))) {
   if (Test-Path $c) { $mgrSrc = $c; break }
+}
+if (-not $mgrSrc) {
+  $mgrDl = Join-Path $env:TEMP "知识中枢.py"
+  if (Get-FileWithFallback -Url "https://raw.githubusercontent.com/gang1711/AICG-Desktop-Cockpit/main/%E7%9F%A5%E8%AF%86%E4%B8%AD%E6%9E%A2.py" -OutFile $mgrDl -MinSizeKB 5) { $mgrSrc = $mgrDl }
 }
 if ($mgrSrc) {
   Copy-Item $mgrSrc "$hub\知识中枢.py" -Force

@@ -6,7 +6,7 @@
 
 ![平台](https://img.shields.io/badge/平台-Windows_10_\/_11-0078D4) ![安装](https://img.shields.io/badge/部署-一键-3DDC84) ![许可](https://img.shields.io/badge/脚本-MIT-blue) ![账号](https://img.shields.io/badge/注册-不需要-orange)
 
-**13 个桌面格子 · 7 个开源组件 · 0 个账号 · 全部数据本地**
+**16 个桌面格子 · 7 个开源组件 + 1 个自研管理器 · 0 个账号 · 全部数据本地**
 
 </div>
 
@@ -52,19 +52,20 @@ powershell -ExecutionPolicy Bypass -File .\deploy-cockpit.ps1
 
 > 脚本会**自动关闭相关进程**再修改配置，不怕文件占用。Listen1 安装可能弹一次 UAC，点允许即可。
 
-## 部署的 7 个模块
+## 部署的 8 大模块
 
-| 模块 | 开源仓库 | 驾驶舱里的角色 |
+| 模块 | 来源 | 驾驶舱里的角色 |
 |:---|:---|:---|
-| **DeskBox** 1.4.8 | [Tianyu199509/DeskBox](https://github.com/Tianyu199509/DeskBox) | 13 个桌面格子：收纳格子+映射格子+功能格子，WinUI 3 原生质感 |
+| **DeskBox** 1.4.8 | [Tianyu199509/DeskBox](https://github.com/Tianyu199509/DeskBox) | 16 个桌面格子：收纳格子+映射格子+功能格子，WinUI 3 原生质感 |
 | **Listen1** 2.33 | [listen1/listen1_desktop](https://github.com/listen1/listen1_desktop) | 网易云/QQ/酷狗/酷我/B站/咪咕 聚合搜索播放 |
 | **Lively Wallpaper** 2.2.1 | [rocksdanister/lively](https://github.com/rocksdanister/lively) | 视频/网页/图片壁纸 + 内置音频可视化（Fluids/Music TV/Music Tunnel） |
 | **TagStudio** 9.6.3 | [TagStudioDev/TagStudio](https://github.com/TagStudioDev/TagStudio) | 图片/视频/音频原地索引打标签（已切简体中文） |
 | **QuickLook** 4.5.0 | [QL-Win/QuickLook](https://github.com/QL-Win/QuickLook) | 空格键即时预览任何文件 |
 | **Everything** 1.4.1 | [voidtools/Everything](https://www.voidtools.com/) | 全盘文件秒搜（并入 DeskBox 搜索） |
 | **TranslucentTB** 2026.1 | [TranslucentTB/TranslucentTB](https://github.com/TranslucentTB/TranslucentTB) | 任务栏全透明沉浸 |
+| **知识中枢**（自研） | 本仓库 [知识中枢.py](知识中枢.py) | **提示词/技能管理器**：全盘收割 F/D 盘所有技能与提示词，自动分类 + 中文命名 + SHA-256 去重 + 收件箱自动归位；技能带 [已注入]/[待整理] 状态，promote 一条命令注入主系统 |
 
-另外自带：**壁纸轮换循环**（每小时从壁纸库随机上墙）、**素材中心目录结构**、**DeskBox 13 格配置注入**（含待办五色、桌面自动整理、收纳根迁移、Ctrl+Alt+D 显隐热键）。
+另外自带：**壁纸轮换循环**（每小时从壁纸库随机上墙）、**素材中心目录结构**、**DeskBox 16 格配置注入**（含待办五色、桌面自动整理、收纳根迁移、Ctrl+Alt+D 显隐热键）。
 
 ## 专为漫剧创作者设计
 
