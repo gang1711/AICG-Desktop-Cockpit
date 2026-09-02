@@ -12,6 +12,25 @@
 
 ---
 
+## 📸 界面预览
+
+| 素材标签管理 · TagStudio | 壁纸库与音频可视化 · Lively |
+|:---:|:---:|
+| <img src="assets/01-tagstudio-素材库.png" width="100%" alt="TagStudio 素材库"/> | <img src="assets/02-lively-壁纸可视化.png" width="100%" alt="Lively 壁纸库"/> |
+| *角色/道具/场景资产一目了然，右侧直接预览大图* | *内置音乐可视化壁纸 + 你自己的漫剧剧照一键上墙* |
+
+| 聚合音乐搜索 · Listen1 | 全盘秒搜 · Everything |
+|:---:|:---:|
+| <img src="assets/03-listen1-聚合音乐.png" width="100%" alt="Listen1 聚合音乐"/> | <img src="assets/04-everything-全盘秒搜.png" width="100%" alt="Everything 全盘搜索"/> |
+| *网易云/QQ/酷狗/酷我/B站/咪咕 一框全搜* | *268 万条索引，文件秒出（已并入 DeskBox 搜索）* |
+
+| 格子驾驶舱 · DeskBox |
+|:---:|
+| <img src="assets/05-deskbox-关于.png" width="60%" alt="DeskBox"/> |
+| *桌面格子本体，WinUI 3 原生质感，托盘常驻* |
+
+---
+
 ## 这是什么
 
 给 **AI 漫剧创作者** 定制的桌面工作流套件。一条命令，把散乱的 Windows 桌面改造成：
