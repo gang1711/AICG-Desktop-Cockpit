@@ -4,9 +4,11 @@
 
 **一键把 Windows 桌面变成漫剧生产驾驶舱：管线在左、素材在中、应用在右，任务栏隐形，壁纸即氛围。**
 
-![平台](https://img.shields.io/badge/平台-Windows_10_\/_11-0078D4) ![安装](https://img.shields.io/badge/部署-一键-3DDC84) ![许可](https://img.shields.io/badge/脚本-MIT-blue) ![账号](https://img.shields.io/badge/注册-不需要-orange)
+![平台](https://img.shields.io/badge/平台-Windows_10_\/_11-0078D4) ![安装](https://img.shields.io/badge/部署-一键-3DDC84) ![许可](https://img.shields.io/badge/脚本-MIT-blue) ![账号](https://img.shields.io/badge/注册-不需要-orange) ![版本](https://img.shields.io/badge/版本-v1.3.0-8A2BE2)
 
 **16 个桌面格子 · 7 个开源组件 + 1 个自研管理器 · 0 个账号 · 全部数据本地**
+
+📜 [更新日志 CHANGELOG.md](CHANGELOG.md) —— v1.3.0：知识中枢可读 docx / 技能整包不打散 / 教学视频双击即播
 
 </div>
 
