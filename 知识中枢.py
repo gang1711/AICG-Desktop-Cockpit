@@ -16,7 +16,7 @@ r"""
 配置：
   本目录 config.json（可选）：inject_target / harvest_roots / exclude_dirs / media_keywords / size_copy_limit_mb
 """
-import sys, io, json, hashlib, shutil, re, argparse, difflib, time, os
+import sys, io, json, hashlib, shutil, re, argparse, difflib, time, os, subprocess, zipfile, html
 from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -30,6 +30,7 @@ DEFAULT_CFG = {
     "inject_target": str(Path.home() / ".agents" / "skills"),
     "harvest_roots": ["F:\\", "D:\\"],
     "size_copy_limit_mb": 20,
+    "folder_copy_limit_mb": 50,
     "harvest_max_minutes": 8,
     "exclude_dirs": ["$RECYCLE.BIN", "System Volume Information", "Config.Msi", "AppData",
                      "Windows", "Program Files", "Program Files (x86)", "ProgramData",
@@ -38,7 +39,8 @@ DEFAULT_CFG = {
                      "JianyingPro Materials", "JianyingPro Drafts", "剪映工程文件",
                      "迅雷下载", "BaiduNetdisk", "WPSDrive", "Package Cache", "NovelAI",
                      "DumpStack.log.tmp", "软件打包", "models", "models--", ".cache",
-                     "DeskBox", "Everything", "QuickLook", "TagStudio", "Lively Wallpaper"],
+                     "DeskBox", "Everything", "QuickLook", "TagStudio", "Lively Wallpaper",
+                     "AICG-Operating SystemV15.0", "知识中枢"],
     "exclude_ext": [".exe", ".dll", ".pak", ".bin", ".dat", ".apk", ".zip", ".rar", ".7z",
                     ".iso", ".msi", ".msixbundle", ".tar", ".gz", ".tgz", ".woff", ".woff2",
                     ".ttf", ".otf", ".ico", ".lnk", ".tmp", ".log", ".pyc", ".chunk", ".blender"],
@@ -110,19 +112,37 @@ def sha256(p: Path):
     return h.hexdigest()
 
 
+def docx_text(p: Path, limit=6000):
+    """从 docx（zip 包）抽取纯文本——纯标准库，无需第三方依赖"""
+    try:
+        with zipfile.ZipFile(p) as z:
+            xml = z.read("word/document.xml").decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
+    xml = re.sub(r"</w:p>", "\n", xml)
+    txt = html.unescape(re.sub(r"<[^>]+>", "", xml))
+    txt = "\n".join(ln.strip() for ln in txt.splitlines() if ln.strip())
+    return txt[:limit]
+
+
 def extract_title(p: Path):
     name = p.stem
-    if p.suffix.lower() in (".md", ".txt", ".markdown"):
+    suf = p.suffix.lower()
+    lines = []
+    if suf in (".md", ".txt", ".markdown"):
         try:
-            for line in p.read_text(encoding="utf-8", errors="ignore").splitlines()[:12]:
-                line = line.strip().lstrip("#").strip()
-                if line and not line.startswith(("!", "[", ">", "-", "*")):
-                    title = re.sub(r"[*_`\[\]()]|https?://\S+", "", line).strip()
-                    if title:
-                        name = title
-                        break
+            lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()[:12]
         except Exception:
             pass
+    elif suf == ".docx":
+        lines = docx_text(p, 4000).splitlines()[:12]
+    for line in lines:
+        line = line.strip().lstrip("#").strip()
+        if line and not line.startswith(("!", "[", ">", "-", "*")):
+            title = re.sub(r"[*_`\[\]()]|https?://\S+", "", line).strip()
+            if title:
+                name = title
+                break
     title = ILLEGAL.sub("", name).strip(" .。")[:40].strip()
     if not re.search(r"[\u4e00-\u9fff]", title) and re.search(r"[\u4e00-\u9fff]", p.stem):
         title = ILLEGAL.sub("", p.stem).strip(" .。")[:40]
@@ -150,9 +170,12 @@ def classify(p: Path, media_keywords):
         return "04_底层理论", "视听语言"
     if any(k in n for k in ("教程", "教材", "课程", "book")):
         return "05_书籍教材", "AI教程"
-    if suffix in (".md", ".txt"):
+    if suffix in (".md", ".txt", ".docx"):
         try:
-            head = p.read_text(encoding="utf-8", errors="ignore")[:1500].lower()
+            if suffix == ".docx":
+                head = docx_text(p, 4000).lower()
+            else:
+                head = p.read_text(encoding="utf-8", errors="ignore")[:1500].lower()
             for kws, cat, sub in (
                 (("提示词", "prompt"), "01_提示词库", None),
                 (("工作流", "sop", "流程"), "03_方法论", "工作流SOP"),
@@ -175,6 +198,55 @@ def unique_target(cat_dir: Path, title: str, suffix: str):
         t = cat_dir / f"{title}({i}){suffix}"
         i += 1
     return t
+
+
+def unique_target_dir(cat_dir: Path, name: str):
+    t = cat_dir / name
+    i = 2
+    while t.exists():
+        t = cat_dir / f"{name}({i})"
+        i += 1
+    return t
+
+
+SKILL_COPY_IGNORE = shutil.ignore_patterns("__pycache__", ".git", "node_modules",
+                                           ".venv", "venv", ".DS_Store")
+
+
+def folder_size(p: Path):
+    total = 0
+    for dp, dns, fns in os.walk(p):
+        dns[:] = [d for d in dns if d not in (".git", "node_modules", "__pycache__",
+                                              ".venv", "venv")]
+        for fn in fns:
+            try:
+                total += (Path(dp) / fn).stat().st_size
+            except OSError:
+                pass
+    return total
+
+
+def _ps_quote(s: str):
+    return "'" + str(s).replace("'", "''") + "'"
+
+
+def make_video_lnk(src: Path, title: str):
+    """给原位大视频建可双击播放的快捷方式（.lnk），让视频类目能'点开即看'"""
+    d = HUB / "06_教学视频"
+    d.mkdir(parents=True, exist_ok=True)
+    lnk = unique_target(d, title, ".lnk")
+    ps1 = HUB / "_索引" / "_mklnk.ps1"
+    ps1.write_text(
+        "$ws=New-Object -ComObject WScript.Shell\n"
+        f"$s=$ws.CreateShortcut({_ps_quote(lnk)})\n"
+        f"$s.TargetPath={_ps_quote(src)}\n"
+        "$s.Save()\n", encoding="utf-8-sig")
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                        "-File", str(ps1)], capture_output=True, timeout=60)
+    except Exception:
+        pass
+    return lnk if lnk.exists() else None
 
 
 def file_card(src: Path, cat: str, sub: str, title: str, is_pointer: bool):
@@ -200,9 +272,46 @@ def ingest_path(src: Path, cat_override=None, keep_source=True, idx=None, stats=
         idx = load_index()
     stats = stats if stats is not None else {"copied": 0, "dupe": 0, "pointer": 0, "skip": 0}
     if src.is_dir():
-        for f in sorted(src.rglob("*")):
-            if f.is_file() and "_索引" not in f.parts:
-                ingest_path(f, cat_override, keep_source, idx, stats, cfg)
+        # 技能整包入口：含 SKILL.md 的文件夹按整包收录，绝不拆散
+        if (src / "SKILL.md").is_file():
+            idx = idx if idx is not None else load_index()
+            stats = stats if stats is not None else {"copied": 0, "dupe": 0, "pointer": 0, "skip": 0}
+            srcs = idx.setdefault("_srcs", [])
+            if str(src) in srcs:
+                stats["skip"] += 1
+                return stats
+            try:
+                head = (src / "SKILL.md").read_text(encoding="utf-8", errors="ignore")[:800]
+            except Exception:
+                head = ""
+            m = re.search(r"name:\s*[\"']?([\w-]+)", head)
+            ename = m.group(1) if m else src.name
+            m2 = re.search(r"description:\s*[\"']?(.+?)[\"']?\s*$", head, re.M)
+            desc = (m2.group(1).strip() if m2 else "")[:60]
+            title0 = desc[:22] if re.search(r"[\u4e00-\u9fff]", desc) else ename
+            title = ILLEGAL.sub("", title0).strip() or ename
+            sub = next((v for k, v in SKILL_SUB.items() if k in (ename + desc + src.name).lower()), "通用技能")
+            d = HUB / "02_技能库" / sub
+            d.mkdir(parents=True, exist_ok=True)
+            dest = unique_target_dir(d, src.name)
+            shutil.copytree(src, dest, ignore=SKILL_COPY_IGNORE)
+            (dest / "_中枢收录卡.md").write_text(
+                f"# [待整理·整包] {title}\n\n- 技能名：{ename}\n- 状态：待整理（配套文件夹整包收录）\n- 简介：{desc}\n- 来源：{src}\n- 收录时间：{time.strftime('%Y-%m-%d %H:%M')}\n\n> 配套文件齐全，确认后运行 promote 注入主系统。\n",
+                encoding="utf-8")
+            idx["items"].append({"hash": hashlib.sha256(str(src).encode()).hexdigest()[:32],
+                                 "title": title, "category": "02_技能库",
+                                 "rel_path": str(dest.relative_to(HUB)), "src": str(src),
+                                 "size": folder_size(dest), "ts": time.strftime("%Y-%m-%d %H:%M"),
+                                 "status": "待整理", "kind": "整包文件夹"})
+            srcs.append(str(src))
+            stats["copied"] += 1
+            print(f"  [整包技能] {dest.relative_to(HUB)}")
+            return stats
+        for child in sorted(src.iterdir()):
+            if child.name == "_索引":
+                continue
+            if child.is_dir() or child.is_file():
+                ingest_path(child, cat_override, keep_source, idx, stats, cfg)
         return stats
     suffix = src.suffix.lower()
     if suffix in (".tmp", ".crdownload", ".part", ".lnk") or suffix in cfg["exclude_ext"]:
@@ -248,8 +357,22 @@ def ingest_path(src: Path, cat_override=None, keep_source=True, idx=None, stats=
         stats["pointer"] += 1
         print(f"  [指针卡] {rel}（{size/1048576:.0f}MB）")
         is_pointer = True
+    if cat == "06_教学视频" and is_pointer:
+        make_video_lnk(src, title)   # 原位大视频配双击即播快捷方式
+    excerpt = ""
+    if suffix == ".docx":
+        try:                          # docx 文本抽取：中枢副本旁生成可被AI直接阅读的文本版
+            txt = docx_text(src, 200000)
+            if txt:
+                sc = dest.parent / (dest.stem + "_文本版.md")
+                sc.write_text(f"# {title}（docx文本抽取版）\n\n> 由知识中枢自动抽取自：{dest.name}\n\n{txt}",
+                              encoding="utf-8")
+                excerpt = txt[:200]
+        except Exception:
+            pass
     idx["items"].append({"hash": h, "title": title, "category": cat, "rel_path": rel,
-                         "src": str(src), "size": size, "ts": ts, "status": "已收录"})
+                         "src": str(src), "size": size, "ts": ts, "status": "已收录",
+                         "excerpt": excerpt})
     idx.setdefault("_srcs", [])
     idx["_srcs"].append(str(src))
     return stats
@@ -307,11 +430,20 @@ def cmd_harvest(args):
         rootp = Path(root)
         if not rootp.exists():
             return
+        skill_dirs = set()
+
+        def in_skill(s):
+            return any(s == k or s.startswith(k + os.sep) for k in skill_dirs)
+
         for dirpath, dirnames, filenames in os.walk(rootp):
             dirnames[:] = [d for d in dirnames if d not in cfg["exclude_dirs"]
                            and not d.startswith((".", "$"))]
             if time.time() > deadline:
                 raise TimeoutError
+            if "SKILL.md" in filenames:
+                skill_dirs.add(dirpath)
+            elif in_skill(dirpath):
+                continue   # 技能配套子目录不拆收（保持整包完整性）
             for fn in filenames:
                 p = Path(dirpath) / fn
                 if str(p) in srcs:
@@ -320,7 +452,7 @@ def cmd_harvest(args):
                 if suffix in cfg["exclude_ext"]:
                     continue
                 low = fn.lower()
-                # ① 技能：任何位置的 SKILL.md
+                # ① 技能：任何位置的 SKILL.md → 整包收录（配套文件夹不打散）
                 if fn == "SKILL.md":
                     sd = p.parent
                     if str(sd).startswith(str(Path(cfg["inject_target"]).resolve())):
@@ -342,27 +474,48 @@ def cmd_harvest(args):
                     sub = next((v for k, v in SKILL_SUB.items() if k in (ename + desc).lower()), "通用技能")
                     d = HUB / "02_技能库" / sub
                     d.mkdir(parents=True, exist_ok=True)
-                    card = unique_target(d, f"[{status}]技能·{title}（{ename}）", ".md")
-                    card.write_text(
-                        f"# [{status}] {title}\n\n- 技能名：{ename}\n- 状态：{status}\n- 简介新版：{desc}\n- 所在位置：{sd}\n- 收录时间：{time.strftime('%Y-%m-%d %H:%M')}\n\n"
-                        + ("> 已注入主系统，勿移动。\n" if status == "已注入" else "> 待整理：确认后运行 promote 注入主系统。\n"),
-                        encoding="utf-8")
-                    rel = str(card.relative_to(HUB))
-                    add_item(hashlib.sha256(str(sd).encode()).hexdigest()[:32], title,
-                             "02_技能库", rel, sd, 0, status)
+                    fsize = folder_size(sd)
+                    flimit = cfg.get("folder_copy_limit_mb", 50) * 1048576
+                    if status == "待整理" and fsize <= flimit:
+                        dest = unique_target_dir(d, sd.name)
+                        shutil.copytree(sd, dest, ignore=SKILL_COPY_IGNORE)
+                        (dest / "_中枢收录卡.md").write_text(
+                            f"# [待整理·整包] {title}\n\n- 技能名：{ename}\n- 状态：待整理（整包收录）\n- 简介：{desc}\n- 来源：{sd}\n- 收录时间：{time.strftime('%Y-%m-%d %H:%M')}\n\n> 配套文件夹已整体收录，可直接 promote 注入主系统。\n",
+                            encoding="utf-8")
+                        rel = str(dest.relative_to(HUB))
+                        add_item(hashlib.sha256(str(sd).encode()).hexdigest()[:32], title,
+                                 "02_技能库", rel, sd, fsize, status)
+                    else:
+                        card = unique_target(d, f"[{status}]技能·{title}（{ename}）", ".md")
+                        note = ("> 已注入主系统，勿移动。\n" if status == "已注入"
+                                else f"> 待整理：配套文件夹共 {fsize/1048576:.0f} MB，整体保留在原位（不拆散不搬运），确认后运行 promote 注入。\n")
+                        card.write_text(
+                            f"# [{status}] {title}\n\n- 技能名：{ename}\n- 状态：{status}\n- 简介新版：{desc}\n- 所在位置：{sd}\n- 收录时间：{time.strftime('%Y-%m-%d %H:%M')}\n\n"
+                            + note, encoding="utf-8")
+                        rel = str(card.relative_to(HUB))
+                        add_item(hashlib.sha256(str(sd).encode()).hexdigest()[:32], title,
+                                 "02_技能库", rel, sd, fsize, status)
                     srcs.add(str(sd)); srcs.add(str(p)); srcs.add(key)
                     stats["skill"] += 1
                     continue
-                # ② 教学视频（关键词 + 常见视频格式）→ 指针卡
+                # ② 教学视频：小文件收真身，大文件指针卡+可双击播放的 .lnk
                 if suffix in (".mp4", ".mkv", ".mov", ".webm"):
                     if any(k in low or k in str(p.parent).lower() for k in mk):
                         if p.name in srcs or str(p) in srcs:
                             continue
                         title = extract_title(p)
-                        card = file_card(p, "06_教学视频", "", title, True)
-                        rel = str(card.relative_to(HUB))
-                        add_item(sha256(p) if p.stat().st_size < 500*1048576 else f"vid:{p}", title,
-                                 "06_教学视频", rel, p, p.stat().st_size, "已收录")
+                        vsize = p.stat().st_size
+                        h = sha256(p) if vsize < 500*1048576 else f"vid:{p}"
+                        if vsize <= cfg.get("size_copy_limit_mb", 20) * 1048576:
+                            dest = unique_target(HUB / "06_教学视频", title, suffix)
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(p, dest)
+                            rel = str(dest.relative_to(HUB))
+                        else:
+                            card = file_card(p, "06_教学视频", "", title, True)
+                            make_video_lnk(p, title)
+                            rel = str(card.relative_to(HUB))
+                        add_item(h, title, "06_教学视频", rel, p, vsize, "已收录")
                         srcs.add(str(p))
                         stats["video"] += 1
                     continue
@@ -454,6 +607,167 @@ def cmd_promote(args):
     print(f"已注入主系统：{dest}")
 
 
+def cmd_migrate(args):
+    """一次性迁移修正：①清退技能夹拆散副本 ②技能整包归档 ③教学视频改真身"""
+    ensure_tree()
+    cfg = load_cfg()
+    idx = load_index()
+    items = idx["items"]
+
+    # —— ① 技能夹内部文件曾被散收进其它类目 → 删除中枢散件副本（原文件不动）——
+    skill_dirs = {i.get("src") for i in items if i["category"] == "02_技能库" and i.get("src")}
+    skill_dirs.discard(None)
+    cache = {}
+
+    def has_skill_md(d):
+        if d not in cache:
+            cache[d] = (Path(d) / "SKILL.md").is_file()
+        return cache[d]
+
+    removed_files, freed = 0, 0
+    keep = []
+    for i in items:
+        s = i.get("src", "")
+        inside = False
+        if i["category"] != "02_技能库" and s:
+            cur = Path(s).parent
+            for _ in range(12):
+                cs = str(cur)
+                if cs in skill_dirs or has_skill_md(cs):
+                    inside = True
+                    break
+                if cur.parent == cur:
+                    break
+                cur = cur.parent
+        if inside:
+            p = HUB / i["rel_path"]
+            if p.is_file():
+                try:
+                    freed += p.stat().st_size
+                    p.unlink()
+                    removed_files += 1
+                except OSError:
+                    pass
+            continue
+        keep.append(i)
+    items[:] = keep
+    print(f"① 拆散副本清退：删除中枢散件 {removed_files} 个，释放 {freed/1048576:.1f} MB")
+
+    # —— ② 技能整包归档（内容签名去重，配套文件夹整体收录、绝不打散）——
+    limit = cfg.get("folder_copy_limit_mb", 50) * 1048576
+    others = [i for i in items if i["category"] != "02_技能库"]
+    sk_items = [i for i in items if i["category"] == "02_技能库"]
+    seen_sig, seen_src = {}, {}
+    copied = dup = big = keep_card = 0
+    new_items = []
+    for i in sk_items:
+        sd = Path(i.get("src", ""))
+        if not sd.is_dir():
+            new_items.append(i)      # 源已丢失，卡片原样保留
+            keep_card += 1
+            continue
+        parts = []
+        for dp, dns, fns in os.walk(sd):
+            dns[:] = [d for d in dns if d not in (".git", "node_modules", "__pycache__",
+                                                  ".venv", "venv")]
+            for fn in sorted(fns):
+                fp = Path(dp) / fn
+                try:
+                    parts.append(f"{fp.relative_to(sd)}:{fp.stat().st_size}")
+                except OSError:
+                    pass
+        sig = hashlib.sha256("|".join(parts).encode()).hexdigest()
+        if sig in seen_sig:
+            old = HUB / i["rel_path"]
+            if old.is_file() and old.suffix == ".md":
+                old.unlink(missing_ok=True)
+            i2 = dict(i)
+            i2["status"] = "重复收录"
+            i2["note"] = f"与 {seen_src[sig]} 内容完全相同，整包保留份见：{seen_sig[sig]}"
+            new_items.append(i2)
+            dup += 1
+            continue
+        status = i.get("status", "待整理")
+        rel_parts = i["rel_path"].split(os.sep)
+        sub = rel_parts[1] if len(rel_parts) > 2 and rel_parts[1] in CATS["02_技能库"] else "通用技能"
+        if status == "已注入":
+            new_items.append(i)      # 已注入维持指针卡（不搬运主系统内容）
+            seen_sig[sig] = i["rel_path"]
+            seen_src[sig] = str(sd)
+            keep_card += 1
+            continue
+        fsize = folder_size(sd)
+        d = HUB / "02_技能库" / sub
+        d.mkdir(parents=True, exist_ok=True)
+        old = HUB / i["rel_path"]
+        if fsize <= limit:
+            dest = unique_target_dir(d, sd.name)
+            shutil.copytree(sd, dest, ignore=SKILL_COPY_IGNORE)
+            (dest / "_中枢收录卡.md").write_text(
+                f"# [待整理·整包] {i['title']}\n\n- 状态：待整理（配套文件夹整包收录）\n- 来源：{sd}\n- 收录时间：{time.strftime('%Y-%m-%d %H:%M')}\n\n> 配套文件齐全，确认后运行 promote 注入主系统。\n",
+                encoding="utf-8")
+            if old.is_file() and old.suffix == ".md":
+                old.unlink(missing_ok=True)
+            i2 = dict(i)
+            i2["rel_path"] = str(dest.relative_to(HUB))
+            i2["size"] = fsize
+            i2["kind"] = "整包文件夹"
+            new_items.append(i2)
+            copied += 1
+        else:
+            if old.is_file() and old.suffix == ".md":
+                old.write_text(
+                    f"# [待整理·整包指针] {i['title']}\n\n- 配套文件夹共 {fsize/1048576:.0f} MB，整体保留在原位（不拆散不搬运）\n- 所在位置：{sd}\n- 收录时间：{time.strftime('%Y-%m-%d %H:%M')}\n\n> 确认后运行 promote 直接注入整个文件夹。\n",
+                    encoding="utf-8")
+            i2 = dict(i)
+            i2["size"] = fsize
+            i2["kind"] = "整包指针"
+            new_items.append(i2)
+            big += 1
+        seen_sig[sig] = i2["rel_path"]
+        seen_src[sig] = str(sd)
+    idx["items"] = others + new_items
+    print(f"② 技能整包归档：整包拷入 {copied} 个 · 大文件夹指针 {big} 个 · 内容重复合并 {dup} 个 · 维持指针卡 {keep_card} 个")
+
+    # —— ③ 教学视频改真身：小视频拷真 mp4，大视频补可双击播放的 .lnk ——
+    vlimit = cfg.get("size_copy_limit_mb", 20) * 1048576
+    v_local = v_lnk = v_lost = 0
+    for i in idx["items"]:
+        if i["category"] != "06_教学视频":
+            continue
+        src = Path(i.get("src", ""))
+        old = HUB / i["rel_path"]
+        if not src.is_file():
+            v_lost += 1
+            continue
+        try:
+            sz = src.stat().st_size
+        except OSError:
+            v_lost += 1
+            continue
+        if sz <= vlimit:
+            dest = unique_target(HUB / "06_教学视频", i["title"], src.suffix.lower())
+            shutil.copy2(src, dest)
+            if old.is_file() and old.suffix == ".md":
+                old.unlink(missing_ok=True)
+            i["rel_path"] = str(dest.relative_to(HUB))
+            i["kind"] = "本地MP4"
+            v_local += 1
+        else:
+            if make_video_lnk(src, i["title"]):
+                v_lnk += 1
+            if old.is_file() and old.suffix == ".md":
+                t = old.read_text(encoding="utf-8", errors="ignore")
+                if ".lnk" not in t:
+                    old.write_text(t.rstrip() + "\n\n> ▶ 双击本目录同名 .lnk 可直接播放原位视频。\n",
+                                   encoding="utf-8")
+            i["kind"] = "原位指针"
+    print(f"③ 教学视频：真身收录 {v_local} 个 · 原位+快捷方式 {v_lnk} 个 · 源丢失 {v_lost} 个")
+
+    save_index(idx)
+    cmd_report(argparse.Namespace())
+
+
 def cmd_report(args):
     idx = load_index()
     by_cat, by_status = {}, {}
@@ -496,12 +810,14 @@ def main():
     p3.add_argument("--roots", nargs="*", default=None)
     p3.add_argument("--max-min", type=int, default=None)
     p4 = sub.add_parser("promote"); p4.add_argument("key")
+    sub.add_parser("migrate")
     sub.add_parser("report")
     p6 = sub.add_parser("dedupe"); p6.add_argument("--delete", action="store_true")
     a = ap.parse_args()
     ensure_tree()
     {"ingest": cmd_ingest, "scan": cmd_scan, "harvest": cmd_harvest,
-     "promote": cmd_promote, "report": cmd_report, "dedupe": cmd_dedupe}[a.cmd](a)
+     "promote": cmd_promote, "migrate": cmd_migrate, "report": cmd_report,
+     "dedupe": cmd_dedupe}[a.cmd](a)
 
 
 if __name__ == "__main__":
